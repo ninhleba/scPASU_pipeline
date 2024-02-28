@@ -1,0 +1,55 @@
+#!/usr/bin/bash
+
+#BSUB -W 48:00
+#BSUB -n 16
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_2d_peak_ref_allchrs.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_2d_peak_ref_allchrs.%J.err
+#BSUB -q e40long
+#BSUB -J KDM6A_urothelial_2d_peak_ref_allchrs
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+### Load modules ###
+
+module load bedtools/2.30.0
+
+### Initialize variables ###
+#chr=arg1
+compartment=urothelial
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/2_peak_ref/
+chr=chr1_chr2_chr3_chr4_chr5_chr6_chr7_chr8_chr9_chr10_chr11_chr12_chr13_chr14_chr15_chr16_chr17_chr18_chr19_chr20_chr21_chr22_chrX_chrY
+all_filtered_reads_min_polya=3
+polyA_reads_min_polya=1
+
+for prong in all_filtered_reads polyA_reads; do
+   execute_command echo For $prong prong...
+   macs_dir=${dir}2d_split_peaks/${prong}/ 
+   if [ $prong == 'all_filtered_reads' ]; then
+      export polya_dir=${dir}2b_polya/after_genomicAfiltering/
+      export min_polya=${all_filtered_reads_min_polya}
+   elif [ $prong == 'polyA_reads' ]; then
+      export polya_dir=${dir}2b_polya/before_genomicAfiltering/
+      export min_polya=${polyA_reads_min_polya}
+   fi
+   outdir=${dir}2e_intersect_run/${prong}/
+   if [ ! -d "$outdir" ]; then
+      mkdir -p $outdir
+   fi
+   for strand in plus minus; do
+      echo Retain peaks on ${strand} strand in ${chr} with at least ${min_polya} polyA junction reads/sites...
+      bash ${script_dir}2d_create_peak_ref.sh -m ${macs_dir} -p ${polya_dir} -o ${outdir} -s ${strand} -c ${chr} -n ${min_polya} -t ${script_dir} &
+   done
+done
+
+execute_command echo DONE !

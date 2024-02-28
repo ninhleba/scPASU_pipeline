@@ -1,0 +1,49 @@
+#!/usr/bin/bash
+
+#BSUB -W 24:00
+#BSUB -n 32
+#BSUB -M 32
+#BSUB -R rusage[mem=32]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_4b_featureCounts_samplename.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_4b_featureCounts_samplename.%J.err
+#BSUB -q e40medium
+#BSUB -J KDM6A_urothelial_4b_featureCounts_samplename
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+ncores=32
+sample=samplename
+compartment=urothelial
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/4_count_matrix/
+bc_file=${dir}barcode/${sample}_${compartment}_barcodes.tsv
+bam_dir=${dir}4b_SplitBAM/${sample}/
+counts_dir=${dir}4c_PeakMat/${sample}/
+PAS_filtering=false
+if [ $PAS_filtering == 'true' ]
+   then file_prefix=${compartment}
+else
+   file_prefix=${compartment}_noPASfiltering
+fi
+peak_ref=${dir}3h_fragmented_peaks_to_merge/${file_prefix}_final_peak_universe_updated.saf
+mkdir -p $counts_dir
+
+cd ${bam_dir}
+b=$(cat $bc_file)
+
+for barcode in ${b[*]};do
+pre=${sample}_${compartment}_${barcode}
+bamfile=${pre}.bam
+execute_command echo Feature counts for cell $pre ...
+Rscript ${script_dir}feature_counts.R -b ${bamfile} -r ${peak_ref} -o ${counts_dir} -f ${pre} -c ${ncores} -i no
+done
+
+execute_command echo DONE!

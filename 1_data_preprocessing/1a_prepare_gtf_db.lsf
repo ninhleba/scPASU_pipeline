@@ -1,0 +1,30 @@
+#!/bin/sh
+
+#BSUB -W 24:00
+#BSUB -n 16
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /home/bnle/bsub_jobs/output/GRCh38_2023_polyAfilter_createDB.%J.out
+#BSUB -e /home/bnle/bsub_jobs/error/GRCh38_2023_polyAfilter_createDB.%J.err
+#BSUB -q e40medium
+#BSUB -J GRCh38_2023_polyAfilter_createDB
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+WORKING_DIR=$SCRATCH/polyAfilter/
+GTF=$SCRATCH/GRCh38/genes/genes.gtf
+
+outdir=$SCRATCH/KDM6A_scPASU_run/outputs/1c_filtered_bam/
+mkdir -p $outdir
+
+DB=${outdir}gtfdb.db
+
+#SCRIPT
+cd $WORKING_DIR
+
+# Create the GTF database
+python polyAfilter.py createDB -v $GTF $DB
+

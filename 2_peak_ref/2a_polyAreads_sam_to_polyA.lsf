@@ -1,0 +1,49 @@
+#!/usr/bin/bash
+
+#BSUB -W 24:00
+#BSUB -n 16
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_2a_polyAreads_sam_to_polyA.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_2a_polyAreads_sam_to_polyA.%J.err
+#BSUB -q e40medium
+#BSUB -J KDM6A_urothelial_2a_polyAreads_sam_to_polyA
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+module load perl/5.22.1
+
+fasta=$SCRATCH/GRCh38/fasta/genome.fa
+compartment=urothelial
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+bam_dir=${dir}1e_merged_bam/
+polya_dir=${dir}2b_polya/before_genomicAfiltering/
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/2_peak_ref/
+
+if [ ! -d "$polya_dir" ]; then
+  mkdir -p $polya_dir
+fi
+
+for strand in plus minus; do
+   bam=dedup_uniq_merged_${strand}.bam
+   bed=polyAreads_beforegenomicAfiltering_${strand}.bed
+
+   ### Run polyA script ###
+   execute_command echo Finding polyA sites in ${bam} and writing output to ${bed}
+   samtools view ${bam_dir}${bam} | ${script_dir}2a_samToPolyA.pl --minClipped=9 --minAcontent=0.85 - > ${polya_dir}${bed}
+
+   execute_command echo Remove wrong-strand polyA reads
+   polya_file_raw=${polya_dir}${bed}
+   polya_file=${polya_file_raw%.bed}_nowrongstrand.bed
+   if [ $strand == plus ]; then grep -w '+' $polya_file_raw > $polya_file; elif [ $strand == minus ]; then grep -w '-' $polya_file_raw > $polya_file; fi
+done
+
+execute_command echo DONE!

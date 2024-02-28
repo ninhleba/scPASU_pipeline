@@ -1,0 +1,136 @@
+#!/usr/bin/bash
+
+#BSUB -W 3:00
+#BSUB -n 16
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_3b_update_peak_ref_noPASfiltering.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_3b_update_peak_ref_noPASfiltering.%J.err
+#BSUB -q short
+#BSUB -J KDM6A_urothelial_3b_update_peak_ref_noPASfiltering
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+module load bedtools/2.30.0
+
+### Initialize variables ###
+
+compartment=urothelial
+file_prefix=${compartment}
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/3_peak_ref_cleanup/
+maxwidth=1000
+ref_genome=$SCRATCH/GRCh38/fasta/genome.fa
+PAS_filtering=false
+pr_extn="5,50"
+tes_prox_distance=100
+chrs="chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY"
+bam_dir=${dir}1e_merged_bam/
+bam=${bam_dir}dedup_uniq_genomicAfiltered_merged.bam
+min_cov=10
+cores=16
+
+echo Update peak reference...
+for prong in all_filtered_reads polyA_reads; do
+   echo For ${prong} prong...
+   fprefix1=${file_prefix}_${prong}
+   ref_dir=${dir}3a_1st_assign_tu/${prong}/
+   ref=${ref_dir}${fprefix1}_1sttu_assigned_peak_universe_updated.txt
+   
+   # 1. Filter by PR length
+
+   echo Filter by PR width...
+   out1=${dir}3b_Filter_by_PR_width/${prong}/
+   mkdir -p ${out1}
+   Rscript ${script_dir}3b1_filter_by_pr_width.R -r ${ref} -o ${out1} -f ${fprefix1} -m ${maxwidth}
+
+   ref1=${out1}${fprefix1}_pr_filtered_peak_ref.txt
+   turef=${ref_dir}genes_flankupdated.rds
+
+   if [ $PAS_filtering == 'true' ] 
+   # 2a. Filter by polyA hexamer signals (PAS.fa) and proximity to annotated transcript ends
+   then
+      echo Perform filtering by PAS...
+      echo Prepare bed input for hexamer checking...
+      out2=${dir}3c_Filter_by_PAS_and_TES/${prong}/
+      mkdir -p ${out2}
+      Rscript ${script_dir}3b2_hexamer_check_bed_input.R -r ${ref1} -o ${out2} -f ${fprefix1} -e ${pr_extn}
+
+      bed_input=${out2}${fprefix1}_hexamer_check_input.bed
+      fa_output=${out2}${fprefix1}_hexamer_check_input.fa
+      echo Extract genomic ranges of peaks from $ref_genome...
+      bedtools getfasta -fi $ref_genome -bed $bed_input -s -nameOnly -fo $fa_output
+
+      peaks_with_hexamers=${out2}${fprefix1}_peaks_with_hexamer.txt
+      peaks_wo_hexamers=${out2}${fprefix1}_peaks_wo_hexamer.txt
+      PAS_file=${script_dir}PAS.fa
+
+      echo Check PAS presence in peaks...
+      grep -B 1 -f $PAS_file $fa_output | grep '^>' > $peaks_with_hexamers
+      diff -u <(grep '^>' $fa_output| sort) <(sort $peaks_with_hexamers) | grep '^->' > $peaks_wo_hexamers
+
+      echo Check proximity to TES in peaks without PAS...
+      Rscript ${script_dir}3b2_TES_proximity_check.R -b ${tes_prox_distance} -t $turef -f $fprefix1 -o $out2 -r $ref1
+      ref2a=${out2}${fprefix1}_peaks_PAS_and_TES_filtered.txt
+   else
+      echo Skip filtering by PAS...
+      out2=${out1}
+      ref2a=${out2}${fprefix1}_pr_filtered_peak_ref.txt
+      fprefix1=${file_prefix}_noPASfiltering_${prong}
+   fi
+   
+   # 2b. Assign TU - to update peak ref
+
+   echo 2nd TU assignment...
+   fprefix2=${fprefix1}_2ndtu_assigned
+   Rscript ${script_dir}3a_assign_tu.R -d ${script_dir} -f ${fprefix2} -o ${out2} -t ${turef} -b ${ref2a} -c $chrs
+
+   echo Create bed file for UCSC uploads...
+   ref2b=${out2}${fprefix2}_peak_universe_updated.txt
+   Rscript ${script_dir}/../7_ucsc_uploads/create_bed_file.R -r ${ref2b} -o ${out2} -f ${fprefix2}
+   
+   # 3a. Calculate peak counts
+
+   echo Get peak counts using ${bam}...
+   ref_saf=${out2}${fprefix2}_peak_universe_updated.saf
+   out3=${dir}3d_PeakCoverage/${prong}/
+   mkdir -p ${out3}
+   Rscript ${script_dir}feature_counts.R -b ${bam} -r ${ref_saf} -o ${out3} -f ${fprefix1} -c ${cores} -i no
+
+   # 3b. Calculate per TU peak coverage
+
+   echo Get peak coverage...
+   counts_file=${out3}${fprefix1}_peak_count.rds
+   Rscript ${script_dir}3b3_peaks_coverage.R -r ${ref2b} -c ${counts_file} -o ${out3}
+
+   # 3c.  Plot peak coverage percent
+
+   echo Peak coverage plot... 
+   pcov_file=${out3}${fprefix1}_peak_count_updated.rds
+   w=11
+   h=8
+   x=100
+   y=5000
+   Rscript ${script_dir}3b3_plot_peak_cov.R -p ${pcov_file} -o ${out3} -f ${fprefix1} -a ${w},${h},${x},${y} -s ${script_dir}
+
+   # 3d. Filter peak ref
+   echo Filter peak ref by coverage...
+   out4=${dir}3e_CovFilter_ref/${prong}/
+   mkdir -p ${out4}
+   pcov_file=${out3}${fprefix1}_peak_count_updated.rds
+   Rscript ${script_dir}3b4_filter_peak_ref.R -r ${ref2b} -p ${pcov_file} -o ${out4} -f ${fprefix1} -m ${min_cov}
+
+   # 3e. assign TU
+   echo 3rd TU assignment...
+   ref3=${out4}${fprefix1}_cov_filtered_peak_ref.txt
+   fprefix3=${fprefix1}_3rdtu_assigned
+   turef=${out2}genes_flankupdated.rds
+   Rscript ${script_dir}3a_assign_tu.R -d ${script_dir} -f ${fprefix3} -o ${out4} -t ${turef} -b ${ref3} -c $chrs
+
+   # Also create bed file for UCSC uploads
+   echo Create bed file for UCSC uploads...
+   ref4=${out4}${fprefix3}_peak_universe_updated.txt
+   Rscript ${script_dir}/../7_ucsc_uploads/create_bed_file.R -r ${ref4} -o ${out4} -f ${fprefix3}
+done

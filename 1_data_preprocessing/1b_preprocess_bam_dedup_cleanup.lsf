@@ -1,0 +1,50 @@
+#!/usr/bin/bash
+
+#BSUB -W 24:00
+#BSUB -n 32
+#BSUB -M 200
+#BSUB -R rusage[mem=200]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_1b_preprocess_bam_dedup_cleanup_samplename.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_1b_preprocess_bam_dedup_cleanup_samplename.%J.err
+#BSUB -q e40medium
+#BSUB -J KDM6A_1b_preprocess_bam_dedup_cleanup_samplename
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+# Input dir #
+sample=samplename
+bam_file=$SCRATCH/KDM6A_human_data/cellranger_outputs_GRCh38-2023/${sample}/outs/possorted_genome_bam.bam
+
+# Output directories #
+outdir=$SCRATCH/KDM6A_scPASU_run/outputs/
+dedup_dir=${outdir}1a_dedup_bam/
+clean_bam_dir=${outdir}/1b_clean_bam/
+
+mkdir -p ${dedup_dir}
+mkdir -p ${clean_bam_dir}
+
+NTHREADS=32
+
+## 1. Dedup ##
+
+execute_command echo 'Deduplicate reads...'
+umi_tools dedup -I $bam_file -S ${dedup_dir}${sample}_dedup.bam --method=unique --extract-umi-method=tag --umi-tag=UB --cell-tag=CB
+execute_command echo 'Indexing the last bam file...'
+samtools index ${dedup_dir}${sample}_dedup.bam
+
+## 2. Cleanup BAM - only uniquely mapped reads retained ##
+
+execute_command echo 'Clean up bam...'
+samtools view -b -q 1 ${dedup_dir}${sample}_dedup.bam > ${clean_bam_dir}${sample}_dedup_uniq.bam
+execute_command echo 'Indexing the last bam file...'
+samtools index ${clean_bam_dir}${sample}_dedup_uniq.bam
+
+execute_command echo 'DONE'

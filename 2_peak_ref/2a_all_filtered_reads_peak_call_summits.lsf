@@ -1,0 +1,51 @@
+#!/usr/bin/bash
+
+#BSUB -W 24:00
+#BSUB -n 16
+#BSUB -M 64
+#BSUB -R rusage[mem=64]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_2a_all_filtered_reads_peak_call_summits.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_2a_all_filtered_reads_peak_call_summits.%J.err
+#BSUB -q e40medium
+#BSUB -J KDM6A_urothelial_2a_all_filtered_reads_peak_call_summits
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+compartment=urothelial
+prong=all_filtered_reads
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+bam_dir=${dir}1e_merged_bam/
+out_dir=${dir}2a_peaks/${prong}/
+
+if [ ! -d "$out_dir" ]; then
+  mkdir -p $out_dir
+fi
+
+cd ${bam_dir}
+
+for strand in plus minus; do
+   bam_prefix=dedup_uniq_genomicAfiltered_merged_${strand}
+   macs2 callpeak \
+        --seed 123 \
+        -t ${bam_dir}${bam_prefix}.bam \
+        --keep-dup all \
+        --gsize hs \
+        --format BAM \
+        --nomodel \
+        --extsize 200 \
+        --outdir ${out_dir} \
+        --name ${bam_prefix} \
+        -B \
+	--verbose 2 \
+        --call-summits &
+done
+
+execute_command echo DONE!

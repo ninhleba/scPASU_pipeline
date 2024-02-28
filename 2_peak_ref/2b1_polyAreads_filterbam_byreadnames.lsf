@@ -1,0 +1,50 @@
+#!/bin/sh
+
+#BSUB -W 24:00
+#BSUB -n 32
+#BSUB -M 120
+#BSUB -R rusage[mem=120]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_2b1_polyAreads_filterbam_byreadnames.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_2b1_polyAreads_filterbam_byreadnames.%J.err
+#BSUB -q e40medium
+#BSUB -J KDM6A_urothelial_2b1_polyAreads_filterbam_byreadnames
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+module load picard
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+compartment=urothelial
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+input_bam_dir=${dir}1e_merged_bam/
+polya_dir=${dir}2b_polya/before_genomicAfiltering/
+readname_dir=${polya_dir}read_names/
+output_bam_dir=${polya_dir}bam_files/
+
+if [ ! -d "$readname_dir" ]; then mkdir -p $readname_dir; fi
+if [ ! -d "$output_bam_dir" ]; then mkdir -p $output_bam_dir; fi
+
+input_bam_dir=${dir}1e_merged_bam/
+
+for strand in plus minus; do
+   input_bam_file=${input_bam_dir}dedup_uniq_merged_${strand}.bam
+   prefix=polyAreads_beforegenomicAfiltering_${strand}_nowrongstrand
+   polya_file=${polya_dir}${prefix}.bed
+   polyA_read_names=${readname_dir}${prefix}.csv
+   output_bam_file=${output_bam_dir}${prefix}.bam
+
+   cut -f4 $polya_file > $polyA_read_names
+
+   execute_command echo Filter sam reads by read names...
+   java -Xmx100g -jar $PICARD_PATH/picard.jar FilterSamReads I=${input_bam_file} O=${output_bam_file} READ_LIST_FILE=${polyA_read_names} FILTER=includeReadList
+   
+   execute_command echo Indexing the last bam file...
+   samtools index ${output_bam_file}
+done
+
+execute_command echo DONE!

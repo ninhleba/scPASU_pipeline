@@ -1,0 +1,33 @@
+#!/usr/bin/bash
+
+#BSUB -W 3:00
+#BSUB -n 4
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_4c_merge_counts_samplename.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_4c_merge_counts_samplename.%J.err
+#BSUB -q short
+#BSUB -J KDM6A_urothelial_4c_merge_counts_samplename
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+sample=samplename
+compartment=urothelial
+
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/4_count_matrix/
+counts_dir=${dir}4c_PeakMat/${sample}/
+outdir=${dir}4d_merged_PeakMat/${sample}/
+
+prefix=${sample}_${compartment}
+execute_command echo Merge counts for $prefix...
+Rscript ${script_dir}merge_counts.R -d ${counts_dir} -f ${prefix} -o ${outdir}
+execute_command echo DONE!

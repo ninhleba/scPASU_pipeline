@@ -1,0 +1,45 @@
+#!/usr/bin/bash
+
+#BSUB -W 3:00
+#BSUB -n 32
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_arg1_arg2_SplitBAM_arg3.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_arg1_arg2_SplitBAM_arg3.%J.err
+#BSUB -q e40short
+#BSUB -J KDM6A_arg1_arg2_SplitBAM_arg3
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+sample=arg1
+compartment=arg2
+subfold_num=arg3
+ncores=32
+
+bam_dir=arg4
+bam=arg5
+subset_bam_dir=arg6
+new_bc_dir=arg7
+
+mkdir -p ${subset_bam_dir}
+
+bc_dir=${new_bc_dir}/${sample}/folder${subfold_num}/
+
+cd ${bc_dir}
+bc=$(ls *.tsv)
+
+for barcode in ${bc[*]}; do
+bc_name=${barcode%.tsv}
+execute_command echo Splitting bam for cell $bc_name...
+subset-bam_linux -b ${bam} -c ${bc_dir}${barcode} -o ${subset_bam_dir}${sample}_${compartment}_${bc_name}.bam --cores ${ncores} --bam-tag CB:Z &
+done
+
+execute_command echo DONE!

@@ -1,0 +1,44 @@
+#!/usr/bin/bash
+
+#BSUB -W 3:00
+#BSUB -n 36
+#BSUB -M 64
+#BSUB -R rusage[mem=64]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_final_peaks_nuc_freq_plot_first.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_final_peaks_nuc_freq_plot_first.%J.err
+#BSUB -q e40short
+#BSUB -J KDM6A_urothelial_final_peaks_nuc_freq_plot_first
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate RefGenome_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+compartment=urothelial
+PAS_filtering=false
+script_dir=${SCRATCH}/KDM6A_scPASU_run/Scripts/${compartment}/3_peak_ref_cleanup/
+dir=${SCRATCH}/KDM6A_scPASU_run/outputs/${compartment}/
+outdir=${dir}3f_merge_two_prongs/nuc_freq_plot_201-mer/
+kmer_to_plot=first
+kmer_size=201
+ncore=36
+ref_genome=hg38
+if [ $PAS_filtering == 'true' ]
+   then file_prefix=${compartment}
+else
+   file_prefix=${compartment}_noPASfiltering
+fi
+ref=${dir}3f_merge_two_prongs/${file_prefix}_4thtu_assigned_peak_universe_updated.txt
+
+execute_command echo Nuc frequency plotting...
+Rscript ${script_dir}nuc_freq_plot.R -c ${ncore} -f ${file_prefix} -o $outdir -r $ref -k ${kmer_size} -b -n ${kmer_to_plot} -g $ref_genome
+
+#### Plot polyAsite2.0 DB
+ref=${SCRATCH}/KDM6A_scPASU_run/atlas.clusters.2.0.GRCh38.96_minGapwidth1_peak_universe_updated.txt 
+Rscript ${script_dir}nuc_freq_plot.R -c ${ncore} -f atlas.clusters.2.0.GRCh38.96 -o $outdir -r $ref -k ${kmer_size} -n ${kmer_to_plot} -g $ref_genome
+execute_command echo 'DONE'

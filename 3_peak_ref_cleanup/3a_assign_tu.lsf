@@ -1,0 +1,44 @@
+#!/usr/bin/bash
+
+#BSUB -W 3:00
+#BSUB -n 4
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_3a_1st_assign_tu.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_3a_1st_assign_tu.%J.err
+#BSUB -q short
+#BSUB -J KDM6A_urothelial_3a_1st_assign_tu
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+### Initialize variables ###
+
+compartment=urothelial
+file_prefix=${compartment}
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/3_peak_ref_cleanup/
+turef=${dir}hg38_turef/genes.rds
+chrs=chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
+
+execute_command echo Assigning TU to peaks...
+for prong in all_filtered_reads polyA_reads; do
+   peaks_ref_dir=${dir}2e_intersect_run/${prong}/
+   outdir=${dir}3a_1st_assign_tu/${prong}/
+   fprefix=${file_prefix}_${prong}_1sttu_assigned
+
+   echo For ${prong} prong...
+   Rscript ${script_dir}3a_assign_tu.R -d ${script_dir} -p ${peaks_ref_dir} -f ${fprefix} -o ${outdir} -t ${turef} -c $chrs
+
+   echo Create bed file for UCSC uploads...
+   ref=${outdir}${fprefix}_peak_universe_updated.txt
+   Rscript ${script_dir}/../7_ucsc_uploads/create_bed_file.R -r ${ref} -o ${outdir} -f ${fprefix}
+done
+execute_command echo DONE!

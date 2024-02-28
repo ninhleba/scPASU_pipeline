@@ -1,0 +1,54 @@
+#!/usr/bin/bash
+
+#BSUB -W 48:00
+#BSUB -n 32
+#BSUB -M 120
+#BSUB -R rusage[mem=120]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_subset_urothelial_samplename.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_subset_urothelial_samplename.%J.err
+#BSUB -q e40long
+#BSUB -J KDM6A_subset_urothelial_samplename
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+# Initialize variables #
+compartment=urothelial
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/
+outdir=${dir}${compartment}/
+
+sample=samplename
+NTHREADS=32
+
+barcode_file=${outdir}/barcode/${sample}_${compartment}_barcodes.tsv
+
+bam_dir_before_genomicAfiltered=${dir}1b_clean_bam/
+bam_dir_after_genomicAfiltered=${dir}1c_filtered_bam/
+bam_output_before_genomicAfiltered=${sample}_dedup_uniq_${compartment}.bam
+bam_output_after_genomicAfiltered=${sample}_dedup_uniq_filtered_${compartment}.bam
+
+subset_dir=${outdir}1d_subset_bam/
+
+## Subset ##
+if [ ! -d "$subset_dir" ]; then
+  mkdir -p $subset_dir
+fi
+
+execute_command echo Subset-bam for the $compartment compartment before genomicA filtering...
+subset-bam_linux -b ${bam_dir_before_genomicAfiltered}${sample}_dedup_uniq.bam -c ${barcode_file} -o ${subset_dir}${bam_output_before_genomicAfiltered} --log-level debug --cores $NTHREADS
+execute_command echo 'Indexing the last bam file...'
+samtools index ${subset_dir}${bam_output_before_genomicAfiltered}
+
+execute_command echo Subset-bam for the $compartment compartment after genomicA filtering...
+subset-bam_linux -b ${bam_dir_after_genomicAfiltered}${sample}_dedup_uniq_filtered_2ndround.bam -c ${barcode_file} -o ${subset_dir}${bam_output_after_genomicAfiltered} ---log-level debug --cores $NTHREADS
+execute_command echo 'Indexing the last bam file...'
+samtools index ${subset_dir}${bam_output_after_genomicAfiltered}
+
+execute_command echo DONE!

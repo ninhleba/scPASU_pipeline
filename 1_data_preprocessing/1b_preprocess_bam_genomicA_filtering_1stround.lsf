@@ -1,0 +1,59 @@
+#!/usr/bin/bash
+
+#BSUB -W 24:00
+#BSUB -n 32
+#BSUB -M 300
+#BSUB -R rusage[mem=300]
+#BSUB -o /home/bnle/bsub_jobs/output/KDM6A_1b_preprocess_bam_genomicA_filtering_1stround_samplename.%J.out
+#BSUB -e /home/bnle/bsub_jobs/error/KDM6A_1b_preprocess_bam_genomicA_filtering_1stround_samplename.%J.err
+#BSUB -q e40medium
+#BSUB -J KDM6A_1b_preprocess_bam_genomicA_filtering_1stround_samplename
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+# Output directories #
+outdir=$SCRATCH/KDM6A_scPASU_run/outputs/
+clean_bam_dir=${outdir}/1b_clean_bam/
+filter_dir=${outdir}/1c_filtered_bam/
+
+sample=samplename
+NTHREADS=32
+
+## 3. Filter genomicA reads ##
+
+WORKING_DIR=$SCRATCH/polyAfilter/
+
+FASTA=$SCRATCH/GRCh38/fasta/genome.fa
+GTF=$SCRATCH/GRCh38/genes/genes.gtf
+
+BAM=${clean_bam_dir}${sample}_dedup_uniq.bam
+BAM_FILTERED1=${filter_dir}${sample}_dedup_uniq_filtered_1stround.bam
+BAM_FILTERED2=${filter_dir}${sample}_dedup_uniq_filtered_2ndround.bam
+
+DB=${filter_dir}gtfdb.db
+TRANS_INTRON=${filter_dir}${sample}_trans_intron.pkl
+TRANS_NOINTRON=${filter_dir}${sample}_trans_nointron.pkl
+
+# SCRIPT
+cd $WORKING_DIR
+
+# 1st round
+# Create the TRANS file including intronic coverage
+#execute_command echo 'Create the TRANS file including intronic coverage...'
+#python polyAfilter.py createTRANS -i $DB $BAM $TRANS_INTRON
+
+# Filter the BAM file
+execute_command echo 'Filter out the genomicA reads including intronic coverage...'
+python polyAfilter.py BAMfilter -m 3 -i -v -p $NTHREADS 300 10 $BAM $FASTA $TRANS_INTRON -o $BAM_FILTERED1
+execute_command echo 'Indexing the last bam file...'
+samtools index $BAM_FILTERED1
+
+execute_command echo 'DONE'

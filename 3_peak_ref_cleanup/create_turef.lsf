@@ -1,0 +1,32 @@
+#!/usr/bin/bash
+
+#BSUB -W 3:00
+#BSUB -n 4
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /home/bnle/bsub_jobs/output/create_turef_from_hg38_2023.%J.out
+#BSUB -e /home/bnle/bsub_jobs/error/create_turef_from_hg38_2023.%J.err
+#BSUB -q e40short
+#BSUB -J create_turef_from_hg38_2023
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+### Initialize variables ###
+
+compartment=urothelial
+dir=$SCRATCH/KDM6A_scPASU_run/
+script_dir=${dir}Scripts/${compartment}/3_peak_ref_cleanup/
+gtf_file=$SCRATCH/GRCh38/genes/genes.gtf
+outdir=${dir}outputs/${compartment}/hg38_turef/
+
+execute_command echo 'Assigning TU to peaks...'
+Rscript ${script_dir}create_turef.R -d ${script_dir} -g ${gtf_file} -o ${outdir} -f 5000 -a gene_symbol
+execute_command echo DONE!

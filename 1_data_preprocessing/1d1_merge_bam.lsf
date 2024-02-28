@@ -1,0 +1,58 @@
+#!/usr/bin/bash
+
+#BSUB -W 48:00
+#BSUB -n 16
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_merge_bam_aftergenomicAfiltering.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_merge_bam_aftergenomicAfiltering.%J.err
+#BSUB -q e40long
+#BSUB -J KDM6A_urothelial_merge_bam_aftergenomicAfiltering
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+# Merge genomicA-filtered BAM (AFTER genomicA filtering)
+compartment=urothelial
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+bam_dir=${dir}1d_subset_bam/
+outdir=${dir}1e_merged_bam/
+
+if [ ! -d "$outdir" ]; then
+  mkdir -p $outdir
+fi
+
+### Merge filtered BAMs ###
+
+cd ${bam_dir}
+bam=$(ls --ignore='*.bai' | grep 'filtered')
+
+## a. Merge  ##
+
+cd ${bam_dir}
+
+execute_command echo 'Merging the following bam files:' ${bam}
+samtools merge ${outdir}dedup_uniq_genomicAfiltered_merged.bam ${bam}
+execute_command echo 'Indexing the merged bam file...'
+samtools index ${outdir}dedup_uniq_genomicAfiltered_merged.bam
+
+## b. Split by strand ##
+
+execute_command echo 'Splitting the plus bam file...'
+samtools view -F 16 -b ${outdir}dedup_uniq_genomicAfiltered_merged.bam > ${outdir}dedup_uniq_genomicAfiltered_merged_plus.bam
+execute_command echo 'Splitting the minus bam file...'
+samtools view -f 16 -b ${outdir}dedup_uniq_genomicAfiltered_merged.bam > ${outdir}dedup_uniq_genomicAfiltered_merged_minus.bam
+
+execute_command echo 'Indexing the plus bam file...'
+samtools index ${outdir}dedup_uniq_genomicAfiltered_merged_plus.bam
+execute_command echo 'Indexing the minus bam file...'
+samtools index ${outdir}dedup_uniq_genomicAfiltered_merged_minus.bam
+
+execute_command echo 'DONE'

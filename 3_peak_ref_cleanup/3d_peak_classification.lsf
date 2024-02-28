@@ -1,0 +1,43 @@
+#!/usr/bin/bash
+
+#BSUB -W 3:00
+#BSUB -n 16
+#BSUB -M 64
+#BSUB -R rusage[mem=64]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_3d_peak_classification.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_3d_peak_classification.%J.err
+#BSUB -q short
+#BSUB -J KDM6A_urothelial_3d_peak_classification
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+### Initialize variables ###
+
+compartment=urothelial
+PAS_filtering=false
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/3_peak_ref_cleanup/
+indir=${dir}3f_merge_two_prongs/
+outdir=${dir}3g_peak_classification/
+turef=${indir}genes_flankupdated.rds
+dist_pct=0.1
+frag_length=500
+ncores=16
+if [ $PAS_filtering == 'true' ]
+   then file_prefix=${compartment}
+else
+   file_prefix=${compartment}_noPASfiltering
+fi
+ref=${indir}${file_prefix}_4thtu_assigned_peak_universe_updated.txt
+
+execute_command echo 'Classify peaks and identify split peaks to merge...'
+Rscript ${script_dir}3d_peak_classification.R -b $ref -o $outdir -f ${file_prefix} -t $turef -p $dist_pct -l $frag_length -n $ncores -z
+execute_command echo DONE!

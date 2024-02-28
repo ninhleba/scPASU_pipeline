@@ -1,0 +1,31 @@
+#!/usr/bin/bash
+
+#BSUB -W 1:00
+#BSUB -n 4
+#BSUB -M 16
+#BSUB -R rusage[mem=16]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_4a_SplitBAM_samplename.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_4a_SplitBAM_samplename.%J.err
+#BSUB -q e40short
+#BSUB -J KDM6A_urothelial_4a_SplitBAM_samplename
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+sample=samplename
+compartment=urothelial
+num_folder=numberfolder
+
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/4_count_matrix/
+bc_dir=${dir}barcode/
+bam_dir=${dir}1d_subset_bam/
+bam=${bam_dir}${sample}_dedup_uniq_filtered_${compartment}.bam
+outdir=${dir}4a_split_bc/
+subset_bam_dir=${dir}4b_SplitBAM/${sample}/
+
+Rscript ${script_dir}4a_split_bc.R -b ${bc_dir} -s ${sample} -c ${compartment} -o $outdir -n ${num_folder}
+
+for i in $(seq 1 ${num_folder}); do sed "s/arg1/$sample/g" ${script_dir}4a_SplitBAM.lsf | sed "s/arg2/$compartment/g" | sed "s/arg3/$i/g" | sed "s#arg4#${bam_dir}#g" | sed "s#arg5#${bam}#g" | sed "s#arg6#${subset_bam_dir}#g" | sed "s#arg7#$outdir#g" | bsub; done

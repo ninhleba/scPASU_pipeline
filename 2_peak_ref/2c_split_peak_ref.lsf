@@ -1,0 +1,77 @@
+#!/usr/bin/bash
+
+#BSUB -W 24:00
+#BSUB -n 16
+#BSUB -M 64
+#BSUB -R rusage[mem=64]
+#BSUB -o /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/output/KDM6A_urothelial_2c_split_peak_ref.%J.out
+#BSUB -e /rsrch6/scratch/mol_cgenesis/bnle/bsub_jobs/error/KDM6A_urothelial_2c_split_peak_ref.%J.err
+#BSUB -q medium
+#BSUB -J KDM6A_urothelial_2c_split_peak_ref
+#BSUB -u bnle@mdanderson.org
+#BSUB -B
+#BSUB -N
+
+source activate scPASU_env
+
+function execute_command {
+    echo "$(date +"%Y-%m-%d %H:%M:%S"):"
+    "$@"
+}
+
+compartment=urothelial
+file_prefix=${compartment}
+script_dir=$SCRATCH/KDM6A_scPASU_run/Scripts/${compartment}/2_peak_ref/ 
+dir=$SCRATCH/KDM6A_scPASU_run/outputs/${compartment}/
+binsize=1
+fragmentsize=200
+extsize=100
+chrs="chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY"
+ncores=16
+
+execute_command echo Split multimodal peaks...
+
+for prong in all_filtered_reads polyA_reads; do
+    echo For ${prong} prong...
+    fprefix=${file_prefix}_${prong}
+    bw_dir=${dir}ucsc_tracks/bigwig_tracks/${binsize}bp/${prong}/
+    summit_dir=${dir}2a_peaks/${prong}/
+    bg_dir=${dir}2c_alignment_signals/${prong}/
+    outdir=${dir}2d_split_peaks/${prong}/
+
+    mkdir -p $bw_dir    
+    mkdir -p $bg_dir
+
+    if [ $prong == 'all_filtered_reads' ]; then
+       export bam_dir=${dir}1e_merged_bam/
+       export direction=3
+    elif [ $prong == 'polyA_reads' ]; then
+       export bam_dir=${dir}2b_polya/before_genomicAfiltering/bam_files/
+       export direction=5
+    fi
+    
+    echo Extract alignment signals...
+    cd $bam_dir
+    for strand in plus minus; do
+       if [ $prong == 'all_filtered_reads' ]; then
+          export bam_file=$(ls *genomicAfiltered*${strand}.bam)
+       elif [ $prong == 'polyA_reads' ]; then
+          export bam_file=$(ls *${strand}*nowrongstrand.bam)
+       fi
+       bamCoverage -b ${bam_file} -o ${bw_dir}${bam_file%.bam}_ext.bw -p $ncores -v --binSize $binsize --extendReads $fragmentsize
+       bigWigToBedGraph ${bw_dir}${bam_file%.bam}_ext.bw ${bg_dir}${bam_file%.bam}.bedGraph
+       echo Also creating raw big Wig track for ${bam_dir}${bam_file} for track visualization...
+       bamCoverage -b ${bam_file} -o ${bw_dir}${bam_file%.bam}_raw.bw -p $ncores -v --binSize $binsize
+    done
+    
+    echo Process summit files...
+    cd $summit_dir
+    plus_summit=$(ls *plus*peaks.xls)
+    grep -v '^#\|^[[:space:]]*$' ${plus_summit} > ${plus_summit%_peaks.xls}_peaks_summits.txt
+    minus_summit=$(ls *minus*peaks.xls) 
+    grep -v '^#\|^[[:space:]]*$' ${minus_summit} > ${minus_summit%_peaks.xls}_peaks_summits.txt 
+    echo Extending MACS2 peaks by $extsize bp $direction prime then splitting them using gaps and summits...
+    Rscript ${script_dir}2c_split_peaks.R -n $ncores -p $prong -b $bg_dir -s $summit_dir -f $fprefix -o $outdir -e ${direction},${extsize} -c $chrs
+done
+
+execute_command echo DONE!
